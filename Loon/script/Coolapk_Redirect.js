@@ -5,26 +5,13 @@ if (url.indexOf("coolapk.com/link") !== -1) {
   if (match) {
     let realUrl = decodeURIComponent(match[1]);
 
-    let html = `
-        <html>
-        <head>
-            <meta http-equiv="refresh" content="0;url=${realUrl}">
-        </head>
-        <body>
-            <script>
-                window.location.href = "${realUrl}";
-            </script>
-        </body>
-        </html>
-        `;
-
     $done({
       response: {
-        status: 200,
+        status: 302,
         headers: {
-          "Content-Type": "text/html; charset=utf-8"
-        },
-        body: html
+          "Location": realUrl,
+          "Cache-Control": "no-cache"
+        }
       }
     });
     return;
