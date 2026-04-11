@@ -1,0 +1,8 @@
+tun:
+  loopback-address:
+    - 10.7.0.1
+
+# 1.App Store下载 Clash Mi
+# 2.Clash Mi -> 核心设置 -> TUN -> 开启 覆写 与 TUN 模式
+# 3.Clash Mi -> 核心设置 -> 覆写 -> 右上角添加 -> 添加配置
+# https://github.com/VenenoSix24/Ivy-Script/raw/refs/heads/main/SideStore/ClashMi/overwhite.yaml
