@@ -1,0 +1,14 @@
+#!name=插件名称
+#!desc=插件描述
+#!openUrl = https://example.com
+#!author=作者名[https://github.com/username]
+#!homepage = https://github.com/username/repo
+#!version=1.0.0
+#!date=2026-04-12 00:00:00
+#!icon=https://example.com/icon.png
+
+[Script]
+http-request ^https:\/\/example\.com\/.* script-path=https://raw.githubusercontent.com/username/repo/refs/heads/main/script/Example.js, requires-body=false, timeout=10, tag=示例脚本
+
+[MITM]
+hostname = example.com

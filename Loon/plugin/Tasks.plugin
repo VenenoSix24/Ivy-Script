@@ -1,0 +1,44 @@
+#!name=Ivy的自用脚本
+#!desc=一些自己平常用的比较多的脚本/插件，可自行开关对应功能
+#!author=VenenoSix24[https://github.com/VenenoSix24]
+#!homepage = https://github.com/VenenoSix24/Ivy-Script
+#!version=1.0.0
+#!date=2026-04-12 13:46:24
+#!icon=https://raw.githubusercontent.com/VenenoSix24/Ivy-Script/refs/heads/main/icons/Loon/tasks.png
+
+[Argument]
+iios_enable = switch,true,false,tag=iios签到-脚本开关
+aliyun_enable = switch,true,false,tag=阿里云签到-脚本开关
+ampDache_enable = switch,true,false,tag=高德打车签到-脚本开关
+glados_enable = switch,true,false,tag=GLaDOS签到-脚本开关
+mihoyo_enable = switch,true,false,tag=米游社签到-脚本开关
+meituan_enable = switch,true,false,tag=美团签到-脚本开关
+wps_enable = switch,true,false,tag=WPS签到-脚本开关
+macat_enable = switch,true,false,tag=马克喵签到-脚本开关
+
+[Script]
+cron "5 0 * * *​" script-path=https://raw.githubusercontent.com/ZenmoFeiShi/Qx/refs/heads/main/iios_checkin.js, tag=iios签到, enable={iios_enable}
+
+cron "0 7,11,17 * * *" script-path=https://gist.githubusercontent.com/Sliverkiss/33800a98dcd029ba09f8b6fc6f0f5162/raw/aliyun.js, timeout=120, tag=阿里云签到, img-url=https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/AliYunDrive.png, enable={aliyun_enable}
+
+http-request ^https:\/\/(auth|aliyundrive)\.alipan\.com\/v2\/account\/token script-path=https://gist.githubusercontent.com/Sliverkiss/33800a98dcd029ba09f8b6fc6f0f5162/raw/aliyun.js, requires-body=true, timeout=60, tag=aliyun, enable={aliyun_enable}
+
+cron "22 7 * * *" script-path=https://raw.githubusercontent.com/fmz200/wool_scripts/main/Scripts/macat/macat_signin.js, timeout=120, tag=马克喵签到, img-url=https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/Macat.png, enable={macat_enable}
+
+http-response ^https?:\/\/(m5(|-zb)|dache)\.amap\.com\/(ws\/yuece\/(act|openapi\/activity\/current)\/query|common\/(alipaymini|wxmini)\?_ENCRYPT=) script-path=https://raw.githubusercontent.com/wf021325/qx/master/task/ampDache.js, requires-body=true, timeout=60, tag=ampDache, enable={ampDache_enable}
+
+cron "1 0 * * *" script-path=https://raw.githubusercontent.com/wf021325/qx/master/task/ampDache.js, timeout=120, tag=高德地图打车签到, enable={ampDache_enable}
+
+cron "5 0 * * *" tag=GLaDOS签到, script-path=https://raw.githubusercontent.com/evilbutcher/Quantumult_X/master/check_in/glados/glados.js, enable={glados_enable}
+
+http-request https:\/\/glados\.rocks\/api\/user\/checkin tag=获取GLaDOS_Cookie, script-path=https://raw.githubusercontent.com/evilbutcher/Quantumult_X/master/check_in/glados/glados.js, enable={glados_enable}
+
+cron "30 7 * * *" tag=米游社签到, script-path=https://raw.githubusercontent.com/chavyleung/scripts/master/mihoyo/mihoyo.js, enable={mihoyo_enable}
+
+cron "25 7 * * *" tag=美团, script-path=https://raw.githubusercontent.com/chavyleung/scripts/master/meituan/meituan.js, enable={meituan_enable}
+
+cron "20 7 * * *" tag=WPS, script-path=https://raw.githubusercontent.com/chavyleung/scripts/master/wps/wps.js, enable={wps_enable}
+
+[MITM]
+hostname = auth.alipan.com, auth.aliyundrive.com, *.amap.com, glados.rocks
+
