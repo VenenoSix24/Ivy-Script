@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         粉笔刷题增强 - 快捷标注/新标签页打开题目
+// @name         粉笔刷题增强 - 快捷键标注/新标签页打开题目
 // @namespace    fenbi-enhance-ivy
 // @version      2.6.1
-// @description  自定义快捷键：标注、撤销、橡皮、清空；题库页今日小结（点击看详情与一周小结）；做题页入口新标签打开；作答完成激励语。
+// @description  支持自定义以下功能的快捷键：标注、撤销、橡皮、清空；点击“去练习”改为从新标签页打开；新增题库页今日小结，可以点击查看详情与一周小结）；添加作答完成激励语。
 // @author       Ivy
 // @homepageURL  https://m.ivyris.top/
 // @supportURL   https://m.ivyris.top/
@@ -1071,7 +1071,7 @@
     var CIRC = 188.5; // 2πr, r=30
     var ringOffset = s.total ? CIRC * (1 - rate / 100) : CIRC;
     var answeredLabel = cfg.rateMode === "answered" ? "作答" : "提交";
-    // 全部题口径：整卷交卷，提交数 = 题数；已作答口径：真实作答数
+    // 全部题依据：整卷交卷，提交数 = 题数；已作答依据：真实作答数
     var heroAnswered = cfg.rateMode === "answered" ? s.answered : s.total;
 
     // 当日明细行
@@ -1107,7 +1107,7 @@
         answeredLabel +
         " " +
         sub +
-        " · 对 " +
+        " · 答对 " +
         c +
         "</span>" +
         '<span class="fbe-dd-bar"><i style="width:0;background:' +
@@ -1161,8 +1161,8 @@
     var wTotal = wq ? Math.round((wc / wq) * 100) : 0;
     var footNote =
       cfg.rateMode === "answered"
-        ? "今日正确率按「已作答」口径 · 本周按全部题口径"
-        : "正确率均按全部题口径";
+        ? "今日正确率按「已作答」依据 · 本周按全部题依据"
+        : "正确率均按全部题依据";
 
     el.innerHTML =
       "<style>" +
@@ -1518,16 +1518,16 @@
     // 快捷键说明
     var hint = document.createElement("div");
     hint.className = "fbe-hint";
-    hint.textContent = "点击按键名重新录制 · 按 Esc 取消";
+    hint.textContent = "点击按键名重新设置 · 按 Esc 取消";
     bodyEl.appendChild(hint);
 
-    // 正确率口径
+    // 正确率依据
     (function () {
       var row = document.createElement("div");
       row.className = "fbe-row";
       row.title = "全部题：没做的题也算进分母；已作答：只统计提交过答案的题";
       var lbl = document.createElement("span");
-      lbl.textContent = "正确率口径";
+      lbl.textContent = "正确率依据";
       var seg = document.createElement("span");
       seg.className = "fbe-seg";
       var opts = [
