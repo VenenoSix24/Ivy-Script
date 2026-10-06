@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         粉笔刷题增强 - 快捷键标注/新标签页打开题目
+// @name         粉笔刷题增强 - 快捷键标注/题库展开状态记忆/智能打开做题页/今日小结
 // @namespace    fenbi-enhance-ivy
-// @version      2.6.1
-// @description  支持自定义以下功能的快捷键：标注、撤销、橡皮、清空；点击“去练习”改为从新标签页打开；新增题库页今日小结，可以点击查看详情与一周小结）；添加作答完成激励语。
+// @version      2.8.3
+// @description  支持自定义以下功能的快捷键：标注、撤销、橡皮、清空；做题页打开方式可选新标签/智能切换/本页，做题页左上角返回可关闭新标签并刷新题库页；记住专项练习展开状态与浏览位置；新增题库页今日小结，可以点击查看详情与一周小结；添加作答完成激励语。
 // @author       Ivy
 // @homepageURL  https://m.ivyris.top/
 // @supportURL   https://m.ivyris.top/
@@ -45,14 +45,19 @@
   var VER =
     typeof GM_info !== "undefined" && GM_info && GM_info.script
       ? GM_info.script.version
-      : "2.6.1";
+      : "2.8.3";
 
   var cfg = {
     toggle: GM_getValue("toggle", "mouse:2"),
     undo: GM_getValue("undo", "mouse:3"),
     eraser: GM_getValue("eraser", "mouse:4"),
     clear: GM_getValue("clear", "mouse:1"),
-    newTab: GM_getValue("newTab", true),
+    // 做题页打开方式：new=总是新标签 / smart=智能（有做题页开着→新标签，否则本页）/ same=总是本页。默认智能
+    newTabMode: (function () {
+      var m = GM_getValue("newTabMode", "");
+      return m === "new" || m === "smart" || m === "same" ? m : "smart";
+    })(),
+    fold: GM_getValue("fold", true),
     quote: GM_getValue("quote", true),
     daily: GM_getValue("daily", true),
     fab: GM_getValue("fab", true),
@@ -256,12 +261,78 @@
     true,
   );
 
-  /* ===== 做题入口新标签打开 ===== */
+  /* ===== 做题页打开方式与返回刷新 ===== */
 
-  var ENTRY = "p.item-status-item, a[class*='pd-item-status']";
+  var ENTRY = "p.item-status-item, [class*='pd-item-status']";
+  var EX_PAGE = /\/ti\/exam\/(exercise|solution)\//;
+  var CATALOG_URL = "https://www.fenbi.com/spa/tiku/guide/catalog";
   var nav =
     (typeof unsafeWindow !== "undefined" && unsafeWindow.navigation) ||
     window.navigation;
+
+  // 智能模式判断"有没有做题页标签开着"：做题页每 3s 心跳一次，pagehide 时清零
+  function exerciseTabAlive() {
+    var t = GM_getValue("fbeExAlive", 0);
+    return t && Date.now() - t < 10000;
+  }
+
+  // 题库页：做题页会写入 catalogRefreshAt，本页重新可见时刷新一次。
+  // refreshAtLoad 取脚本启动时的值，刷新完成后不会再次触发
+  var refreshAtLoad = GM_getValue("catalogRefreshAt", 0);
+  function checkCatalogRefresh() {
+    if (EX_PAGE.test(location.pathname)) return;
+    if (!document.querySelector("ul.key-points")) return;
+    if (GM_getValue("catalogRefreshAt", 0) > refreshAtLoad) location.reload();
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkCatalogRefresh();
+  });
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted) checkCatalogRefresh();
+  });
+
+  // 做题页可能经 SPA 在本标签内打开（智能/本页模式），路径会动态变化，
+  // 所以做题页相关逻辑不能按脚本启动时的路径一次性注册，全部按当前路径判定
+  setInterval(function () {
+    if (EX_PAGE.test(location.pathname)) GM_setValue("fbeExAlive", Date.now());
+  }, 3000);
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted && EX_PAGE.test(location.pathname))
+      GM_setValue("fbeExAlive", Date.now());
+  });
+  window.addEventListener("pagehide", function () {
+    if (!EX_PAGE.test(location.pathname)) return;
+    GM_setValue("fbeExAlive", 0);
+    // 无论以哪种方式离开做题页（返回按钮/手动关标签），都让题库页下次可见时刷新
+    GM_setValue("catalogRefreshAt", Date.now());
+  });
+  // 左上角返回：新标签打开的（有 opener）关闭本标签，题库页自己会刷新；
+  // 同页打开的走 history.back() 回到题库页
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!EX_PAGE.test(location.pathname)) return;
+      var btn =
+        e.target.closest &&
+        e.target.closest(
+          "header.header-container .back-btn, .header-left .back-btn",
+        );
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.opener) {
+        window.close();
+        setTimeout(function () {
+          if (!window.closed && history.length > 1) history.back();
+        }, 250);
+      } else if (history.length > 1) {
+        history.back();
+      } else {
+        location.href = CATALOG_URL;
+      }
+    },
+    true,
+  );
 
   if (nav) {
     // 入口按钮点击后粉笔可能触发两次相同 URL 的导航，需全部拦下且只开一个新标签
@@ -270,20 +341,18 @@
     document.addEventListener(
       "click",
       function (e) {
-        if (!cfg.newTab) return;
-        if (e.target.closest && e.target.closest(ENTRY)) {
-          until = Date.now() + 5000;
-          lastOpened = "";
-        }
+        if (!e.target.closest || !e.target.closest(ENTRY)) return;
+        until = Date.now() + 5000;
+        lastOpened = "";
+        // 离开题库页前记住浏览位置
+        saveFoldPos();
       },
       true,
     );
     nav.addEventListener("navigate", function (e) {
-      if (
-        Date.now() >= until ||
-        !/\/ti\/exam\/exercise\//.test(e.destination.url)
-      )
-        return;
+      if (Date.now() >= until || !EX_PAGE.test(e.destination.url)) return;
+      if (cfg.newTabMode === "same") return;
+      if (cfg.newTabMode === "smart" && !exerciseTabAlive()) return;
       e.preventDefault();
       if (e.destination.url !== lastOpened) {
         lastOpened = e.destination.url;
@@ -295,6 +364,292 @@
       }
     });
   }
+
+  /* ===== 专项练习折叠状态记忆 ===== */
+
+  var FOLD_STORE = "foldState";
+  var foldState = GM_getValue(FOLD_STORE, null) || {};
+  var foldTried = {}; // 恢复点击的尝试计数
+  var foldUserAt = 0; // 用户最近一次在树内点击的时间
+  var foldUserKey = ""; // 用户最近亲手开关的章节行
+  var foldUserKeyAt = 0;
+  var foldClickTimer = 0; // 点击路径
+  var foldObsTimer = 0; // 观察器路径
+
+  function rowExpanded(el) {
+    var sp = el.querySelector(".expend-tool span");
+    if (!sp) return false;
+    return sp.className.split(/\s+/).indexOf("icon-direction") >= 0;
+  }
+
+  function rowName(el, sel) {
+    var p = el.querySelector(sel);
+    return p ? p.textContent.trim() : "";
+  }
+
+  function scanFolds() {
+    var list = document.querySelector("ul.key-points");
+    if (!list) return;
+    // 分类收起时其章节行不在 DOM 里，这些章节的历史状态要继承下来，
+    // 否则"收起整个分类再展开"会把章节的展开记忆也丢掉
+    var state = {};
+    for (var k in foldState) if (k.indexOf("p:") === 0) state[k] = 1;
+    Array.prototype.forEach.call(list.children, function (li) {
+      var cat = rowName(li, ".keypoint-tree-title p");
+      if (!cat) return;
+      if (!rowExpanded(li)) return;
+      state["c:" + cat] = 1;
+      Array.prototype.forEach.call(
+        li.querySelectorAll("point-tree li"),
+        function (row) {
+          var name = rowName(row, "section p.pd-item-name");
+          if (!name) return;
+          var key = "p:" + cat + "|" + name;
+          if (rowExpanded(row)) {
+            state[key] = 1;
+          } else if (foldUserKey === key && Date.now() - foldUserKeyAt < 2000) {
+            // 手动把这一章收起的，丢掉记忆
+            delete state[key];
+          }
+          // 其余可见但收起的章节继承原记忆
+        },
+      );
+    });
+    var now = JSON.stringify(state);
+    if (now !== scanFolds.last) {
+      scanFolds.last = now;
+      foldState = state;
+      GM_setValue(FOLD_STORE, state);
+    }
+  }
+
+  function tryExpand(key, el) {
+    var n = foldTried[key] || 0;
+    if (n >= 3) return false;
+    var sp = el.querySelector(".expend-tool span");
+    if (!sp) return false;
+    foldTried[key] = n + 1;
+    sp.click();
+    return true;
+  }
+
+  // 位置记忆：离开题库页时同时记录像素位置和"锚点行"
+  function posScroller() {
+    return document.getElementById("fenbi-web-exams");
+  }
+  function posScrollTop() {
+    var el = posScroller();
+    return el ? el.scrollTop : window.scrollY || 0;
+  }
+  function posScrollTo(top) {
+    var el = posScroller();
+    if (el) el.scrollTop = top;
+    else window.scrollTo(0, top);
+  }
+  function scrollAnchor() {
+    var rows = document.querySelectorAll("ul.key-points > li, point-tree li");
+    var best = "";
+    var bestTop = 100000;
+    Array.prototype.forEach.call(rows, function (li) {
+      var isCat = !!li.querySelector(":scope > .keypoint-tree-title");
+      var name = isCat
+        ? rowName(li, ".keypoint-tree-title p")
+        : rowName(li, "section p.pd-item-name");
+      if (!name) return;
+      var box = isCat
+        ? li.querySelector(".keypoint-tree-title")
+        : li.querySelector("section");
+      if (!box) return;
+      var top = box.getBoundingClientRect().top;
+      if (top < -40 || top > 300 || top >= bestTop) return;
+      bestTop = top;
+      best = isCat
+        ? "c:" + name
+        : "p:" +
+          rowName(li.closest("ul.key-points > li"), ".keypoint-tree-title p") +
+          "|" +
+          name;
+    });
+    return { key: best, top: bestTop === 100000 ? 76 : Math.round(bestTop) };
+  }
+
+  function saveFoldPos() {
+    if (!document.querySelector("ul.key-points")) return;
+    var an = scrollAnchor();
+    GM_setValue("foldScroll", {
+      y: Math.round(posScrollTop()),
+      a: an.key,
+      at: an.top,
+    });
+  }
+
+  function readFoldPos() {
+    var v = GM_getValue("foldScroll", null);
+    if (v && typeof v === "object")
+      return { y: v.y || 0, a: v.a || "", at: v.at || 76 };
+    if (typeof v === "number") return { y: v, a: "", at: 76 };
+    return { y: 0, a: "", at: 76 };
+  }
+
+  function findAnchorRow(key) {
+    var cat = "";
+    var name = key;
+    var isChapter = key.indexOf("|") > 0;
+    if (isChapter) {
+      cat = key.slice(2, key.indexOf("|"));
+      name = key.slice(key.indexOf("|") + 1);
+    } else if (key.indexOf("c:") === 0) {
+      name = key.slice(2);
+    } else {
+      return null;
+    }
+    var list = document.querySelector("ul.key-points");
+    if (!list) return null;
+    var catLi = null;
+    Array.prototype.forEach.call(list.children, function (li) {
+      if (rowName(li, ".keypoint-tree-title p") === (isChapter ? cat : name))
+        catLi = li;
+    });
+    if (!catLi) return null;
+    if (!isChapter) return catLi.querySelector(".keypoint-tree-title");
+    var target = null;
+    Array.prototype.forEach.call(
+      catLi.querySelectorAll("point-tree li"),
+      function (row) {
+        if (rowName(row, "section p.pd-item-name") === name)
+          target = row.querySelector("section");
+      },
+    );
+    return target;
+  }
+
+  var foldScrolled = false;
+  function applySavedScroll() {
+    if (foldScrolled) return;
+    foldScrolled = true;
+    var pos = readFoldPos();
+    if (pos.y <= 0 && !pos.a) return;
+    var tries = 0;
+    var timer = 0;
+    var stop = function () {
+      clearInterval(timer);
+    };
+    window.addEventListener("wheel", stop, { once: true });
+    window.addEventListener("touchstart", stop, { once: true });
+    window.addEventListener("keydown", stop, { once: true });
+    timer = setInterval(function () {
+      tries++;
+      var y = pos.y;
+      if (pos.a) {
+        var el = findAnchorRow(pos.a);
+        // 按锚点行定位时保留它原本在视口中的偏移，视图与离开时一致
+        if (el) y = el.getBoundingClientRect().top + posScrollTop() - pos.at;
+      }
+      if (y > 0) posScrollTo(y);
+      if (Math.abs(posScrollTop() - y) < 6 || tries >= 16) clearInterval(timer);
+    }, 350);
+  }
+
+  function restoreFolds(fromUser) {
+    if (!cfg.fold) return;
+    // 观察器路径
+    if (!fromUser && foldUserAt && Date.now() - foldUserAt < 600) return;
+    var list = document.querySelector("ul.key-points");
+    if (!list) return;
+    var clicked = false;
+    Array.prototype.forEach.call(list.children, function (li) {
+      var cat = rowName(li, ".keypoint-tree-title p");
+      if (!cat) return;
+      if (!rowExpanded(li)) {
+        if (foldState["c:" + cat])
+          clicked = tryExpand("c:" + cat, li) || clicked;
+        return;
+      }
+      foldTried["c:" + cat] = 0;
+      Array.prototype.forEach.call(
+        li.querySelectorAll("point-tree li"),
+        function (row) {
+          var name = rowName(row, "section p.pd-item-name");
+          if (!name) return;
+          var key = "p:" + cat + "|" + name;
+          if (rowExpanded(row)) {
+            foldTried[key] = 0;
+            return;
+          }
+          if (foldState[key]) clicked = tryExpand(key, row) || clicked;
+        },
+      );
+    });
+    // 折叠已恢复完毕时恢复浏览位置
+    if (!clicked) applySavedScroll();
+    if (clicked && !fromUser) {
+      if (foldObsTimer) clearTimeout(foldObsTimer);
+      foldObsTimer = setTimeout(function () {
+        foldObsTimer = 0;
+        restoreFolds(false);
+      }, 450);
+    }
+  }
+
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!cfg.fold) return;
+      var t = e.target;
+      if (!t.closest || !t.closest("ul.key-points")) return;
+      foldUserAt = Date.now();
+      if (t.closest(".expend-tool")) {
+        var row = t.closest("point-tree li");
+        var catLi = t.closest("ul.key-points > li");
+        var cat = catLi ? rowName(catLi, ".keypoint-tree-title p") : "";
+        var name = row ? rowName(row, "section p.pd-item-name") : "";
+        if (cat && name) {
+          foldUserKey = "p:" + cat + "|" + name;
+          foldUserKeyAt = foldUserAt;
+        }
+      }
+      if (foldClickTimer) clearTimeout(foldClickTimer);
+      foldClickTimer = setTimeout(function () {
+        foldClickTimer = 0;
+        scanFolds();
+        restoreFolds(true);
+      }, 320);
+    },
+    true,
+  );
+  new MutationObserver(function () {
+    if (!cfg.fold) return;
+    if (!document.querySelector("ul.key-points")) {
+      // 离开目录页后，允许下一轮重新恢复
+      foldTried = {};
+      foldScrolled = false;
+      return;
+    }
+    if (Date.now() - foldUserAt < 700) return;
+    if (foldObsTimer) clearTimeout(foldObsTimer);
+    foldObsTimer = setTimeout(function () {
+      foldObsTimer = 0;
+      restoreFolds(false);
+    }, 200);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // 兜底：以任何方式离开题库页时记录浏览位置。
+  window.addEventListener("pagehide", saveFoldPos);
+
+  // 滚动停止后跟随记录
+  var foldScrollSaveTimer = 0;
+  document.addEventListener(
+    "scroll",
+    function () {
+      if (!document.querySelector("ul.key-points")) return;
+      if (foldScrollSaveTimer) clearTimeout(foldScrollSaveTimer);
+      foldScrollSaveTimer = setTimeout(function () {
+        foldScrollSaveTimer = 0;
+        saveFoldPos();
+      }, 400);
+    },
+    true,
+  );
 
   /* ===== 交卷激励语 ===== */
 
@@ -674,6 +1029,12 @@
       else open();
     };
     el.addEventListener("click", onElClick);
+    if (!force && EX_PAGE.test(location.pathname)) {
+      setTimeout(function () {
+        if (el.isConnected && EX_PAGE.test(location.pathname) && !closed)
+          close();
+      }, 10000);
+    }
     if (!force) {
       setTimeout(open, 2600);
     }
@@ -723,7 +1084,7 @@
 
   // 整页跳转：新页面加载时检查
   tryShowQuoteAfterSubmit();
-  // SPA 跳转：路由切换不会重载页面，短暂延迟后检查当前路径
+  // SPA 跳转：交卷后路由一切换就亮出火漆
   if (nav) {
     nav.addEventListener("navigate", function (e) {
       if (!cfg.quote) return;
@@ -731,9 +1092,7 @@
         /\/ti\/exam\/(solution|report)/.test(e.destination.url) &&
         /\/ti\/exam\/exercise\//.test(location.pathname)
       ) {
-        setTimeout(function () {
-          if (isReportPath()) showQuote();
-        }, 300);
+        showQuote();
       }
     });
   }
@@ -840,6 +1199,14 @@
     };
     boot(20);
   }
+
+  // SPA 在本标签内离开又回到目录视图时，官方统计块会重新渲染，今日小结需要重新挂载
+  new MutationObserver(function () {
+    if (!cfg.daily) return;
+    if (!/\/spa\/tiku\/guide\/catalog/.test(location.pathname)) return;
+    var list = document.querySelector("ul.report-list");
+    if (list && !list.querySelector(".fbe-daily-li")) initDailySummary();
+  }).observe(document.documentElement, { childList: true, subtree: true });
 
   function rateColor(rate) {
     if (rate >= 80) return "#00b578";
@@ -1389,7 +1756,7 @@
     panel.id = "fbe-panel";
     panel.innerHTML =
       "<style>" +
-      "#fbe-panel { position: fixed; right: 20px; bottom: 76px; z-index: 2147483647; width: 264px;" +
+      "#fbe-panel { position: fixed; right: 20px; bottom: 76px; z-index: 2147483647; width: 292px;" +
       "  background: #fff; border: 1px solid #ebedf0; border-radius: 12px; overflow: hidden;" +
       '  color: #26303b; font: 13px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;' +
       "  box-shadow: 0 8px 30px rgba(15,23,42,.12); }" +
@@ -1603,8 +1970,47 @@
       bodyEl.appendChild(row);
     })();
 
+    // 做题页打开方式
+    (function () {
+      var row = document.createElement("div");
+      row.className = "fbe-row";
+      row.title =
+        "智能切换：有做题页标签开着时开新标签，否则在本页打开；本页模式的返回也可回到题库页";
+      var lbl = document.createElement("span");
+      lbl.textContent = "做题页打开方式";
+      var seg = document.createElement("span");
+      seg.className = "fbe-seg";
+      var opts = [
+        ["new", "新标签"],
+        ["smart", "智能"],
+        ["same", "本页"],
+      ];
+      var spans = [];
+      var paint = function () {
+        for (var i = 0; i < spans.length; i++)
+          spans[i].className = cfg.newTabMode === opts[i][0] ? "fbe-on" : "";
+      };
+      for (var i = 0; i < opts.length; i++) {
+        (function (val, name) {
+          var sp = document.createElement("span");
+          sp.textContent = name;
+          sp.onclick = function () {
+            cfg.newTabMode = val;
+            GM_setValue("newTabMode", val);
+            paint();
+          };
+          spans.push(sp);
+          seg.appendChild(sp);
+        })(opts[i][0], opts[i][1]);
+      }
+      paint();
+      row.appendChild(lbl);
+      row.appendChild(seg);
+      bodyEl.appendChild(row);
+    })();
+
     var TOGGLES = [
-      ["newTab", "做题页新标签打开"],
+      ["fold", "记住专项练习展开状态"],
       ["quote", "交卷激励语"],
       ["daily", "今日小结"],
       ["fab", "悬浮设置按钮"],

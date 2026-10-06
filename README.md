@@ -11,7 +11,7 @@ Loon类插件的请自行拼接 `loon://import?plugin=` 打开浏览器输入后
 |   Loon   | 酷安链接重定向 | [Coolapk_Redirect.plugin](https://github.com/VenenoSix24/Ivy-Script/raw/refs/heads/main/Loon/plugin/Coolapk_Redirect.plugin) |                欢迎使用捏                 |
 |   Loon   |  自用任务插件  | [Tasks.plugin](https://github.com/VenenoSix24/Ivy-Script/raw/refs/heads/main/Loon/plugin/Tasks.plugin) |          增删一些脚本，仅作自用           |
 |  FFmpeg  |    视频压缩    | [video_compress.command](https://github.com/VenenoSix24/Ivy-Script/blob/main/macOS/FFmpeg/video_compress.command) | macOS使用，需安装ffmpeg，参数越大质量越高 |
-| 油猴脚本 |  粉笔刷题增强  | [fenbi-enhance.ivy.user.js](https://github.com/VenenoSix24/Ivy-Script/raw/refs/heads/main/js/fenbi-enhance.ivy.user.js) |       粉笔快捷标注/新标签页打开题目       |
+| 油猴脚本 |  粉笔刷题增强  | [fenbi-enhance.ivy.user.js](https://github.com/VenenoSix24/Ivy-Script/raw/refs/heads/main/js/fenbi-enhance.ivy.user.js) |       粉笔快捷键标注/题库展开记忆/智能做题页       |
 
 ## 自签
 
